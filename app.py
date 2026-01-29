@@ -11,7 +11,7 @@ import os
 # --- 1. SETUP & CONFIGURATION ---
 
 # 🛑 PASTE YOUR API KEY HERE
-API_KEY = "AIzaSyCgD-9bS0ECQEgvUHio6DCLITQmQm1FLzA"
+API_KEY = ""
 
 # Initialize Google Maps Client
 gmaps = None
