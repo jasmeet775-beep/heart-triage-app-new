@@ -1,35 +1,35 @@
+import streamlit as st
 import pandas as pd
 import folium
+from streamlit_folium import st_folium
 import matplotlib.pyplot as plt
 import googlemaps
 import ast
 import random
 import os
-import webbrowser
 
 # --- 1. SETUP & CONFIGURATION ---
 
-API_KEY = "AIzaSyCgD-9bS0ECQEgvUHio6DCLITQmQm1FLzA"
+# 🛑 PASTE YOUR API KEY HERE
+API_KEY = "YOUR_GOOGLE_API_KEY_HERE"
 
 # Initialize Google Maps Client
-try:
-    gmaps = googlemaps.Client(key=API_KEY)
-except ValueError:
-    gmaps = None
-    print("⚠️ API Key missing or invalid. Map features will be disabled.")
+gmaps = None
+if API_KEY and API_KEY != "YOUR_GOOGLE_API_KEY_HERE":
+    try:
+        gmaps = googlemaps.Client(key=API_KEY)
+    except ValueError:
+        st.error("⚠️ API Key invalid.")
 
 # File Names
 PATIENT_DB_FILE = "patient_database.csv"
 MED_DB_FILE = "heart_medication_detailed.csv"
 
-# --- 2. AUTOMATIC DATABASE GENERATION (If files are missing) ---
-
+# --- 2. AUTOMATIC DATABASE GENERATION ---
+@st.cache_data
 def generate_databases_if_missing():
-    """Checks if CSV files exist. If not, creates them automatically."""
-    
     # A. Generate Medication Database
     if not os.path.exists(MED_DB_FILE):
-        print("⚙️ Generating Medication Database...")
         med_data = [
             {"Condition_Key": "Normal", "Medicine_Name": "Multivitamin", "Brand_Name": "Centrum", "Dosage": "1 Tablet", "Frequency": "Once Daily", "Duration": "Continuous", "Best_Time": "After Breakfast", "Instructions": "Take with water.", "Risk_Warning": "None"},
             {"Condition_Key": "Bradycardia", "Medicine_Name": "Levothyroxine", "Brand_Name": "Synthroid", "Dosage": "50 mcg", "Frequency": "Once Daily", "Duration": "Life-long", "Best_Time": "Empty Stomach", "Instructions": "No calcium/iron with this.", "Risk_Warning": "Check TSH levels."},
@@ -42,17 +42,13 @@ def generate_databases_if_missing():
 
     # B. Generate Patient Database
     if not os.path.exists(PATIENT_DB_FILE):
-        print("⚙️ Generating Patient Database...")
-        
         def get_trace(base):
             trace = []
             curr = base
             for _ in range(60):
                 curr += random.randint(-3, 3)
-                if curr > base + 10:
-                    curr -= 2
-                if curr < base - 10:
-                    curr += 2
+                if curr > base + 10: curr -= 2
+                if curr < base - 10: curr += 2
                 trace.append(curr)
             return str(trace)
 
@@ -73,187 +69,180 @@ def generate_databases_if_missing():
         df.to_csv(PATIENT_DB_FILE, index=False)
 
 # --- 3. MAIN APPLICATION ---
-
-def check_heart_health():
-    # Ensure databases exist before running
+def main():
+    st.set_page_config(page_title="Cardiac Triage", layout="wide")
+    
+    # Initialize Databases
     generate_databases_if_missing()
     
-    # Load Data
-    df_patients = pd.read_csv(PATIENT_DB_FILE)
-    df_meds = pd.read_csv(MED_DB_FILE)
-
-    print("\n" + "="*50)
-    print("       ❤️ CARDIAC TRIAGE SYSTEM (VS CODE EDITION)")
-    print("="*50)
+    st.title("Ř CARDIAC TRIAGE SYSTEM")
+    st.markdown("### Intelligent Heart Health Analysis & Location Services")
     
-    mode = input("Select Mode: \n1. Manual Entry \n2. Load Patient from Database\n>>> Enter 1 or 2: ").strip()
+    # Load Data
+    try:
+        df_patients = pd.read_csv(PATIENT_DB_FILE)
+        df_meds = pd.read_csv(MED_DB_FILE)
+    except:
+        st.error("Database generation failed. Please refresh.")
+        return
 
-    # Variables
+    # --- SIDEBAR INPUTS ---
+    st.sidebar.header("Configuration")
+    mode = st.sidebar.radio("Select Mode", ["Manual Entry", "Load Patient Database"])
+
+    # Variables to populate
     bpm_avg = 75
-    patient_name = "Manual User"
+    patient_name = "User"
     location = ""
-    age = 0
+    age = 30
     symptoms = False
     status = "resting"
     is_athlete = False
     is_pregnant = False
     bpm_trace = [75] * 60
-    
-    # --- INPUT LOGIC ---
-    if mode == '2':
-        print(f"\n--- AVAILABLE PATIENT PROFILES ---")
-        print(df_patients[["Name", "Location"]].to_string())
-        try:
-            p_idx = int(input("\n>>> Enter Patient ID (0-9): "))
-            if 0 <= p_idx < len(df_patients):
-                patient = df_patients.iloc[p_idx]
-                
-                bpm_trace = ast.literal_eval(patient["BPM_Trace"])
-                bpm_avg = sum(bpm_trace) / len(bpm_trace)
-                age = int(patient["Age"])
-                symptoms = patient["Symptoms"].lower() == 'y'
-                status = patient["Status"]
-                is_athlete = patient["Athlete"].lower() == 'y'
-                is_pregnant = patient["Pregnant"].lower() == 'y'
-                location = patient["Location"]
-                patient_name = patient["Name"]
-            else:
-                print("❌ Invalid ID. Using default values.")
-        except Exception as e:
-            print(f"❌ Error loading patient: {e}")
-            return
-    else:
-        # Manual
-        try:
-            bpm_avg = int(input("Enter BPM: "))
-            bpm_trace = [bpm_avg] * 60
-            age = int(input("Age: "))
-            symptoms = input("Symptoms (y/n): ").lower() == 'y'
-            location = input("Location (City, Country): ").strip()
-            status, is_athlete, is_pregnant = "resting", False, False
-        except ValueError:
-            print("❌ Invalid input data.")
-            return
 
-    # --- 1. PLOT GRAPH (Opens in a pop-up window in VS Code) ---
-    print("\n📊 Generating Heart Rate Graph...")
-    try:
-        plt.figure(figsize=(10, 4))
-        color = 'red' if bpm_avg > 100 or bpm_avg < 60 else 'green'
-        plt.plot(bpm_trace, color=color, linewidth=2, label=f'Avg BPM: {bpm_avg:.0f}')
-        plt.title(f'Live Telemetry: {patient_name}')
-        plt.xlabel('Time (seconds)')
-        plt.ylabel('BPM')
-        plt.legend()
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
-        plt.show()
-    except Exception as e:
-        print(f"❌ Graph Error: {e}")
+    if mode == "Load Patient Database":
+        patient_names = df_patients["Name"].tolist()
+        selected_name = st.sidebar.selectbox("Select Patient Profile", patient_names)
+        
+        # Get patient data
+        patient = df_patients[df_patients["Name"] == selected_name].iloc[0]
+        patient_name = patient["Name"]
+        bpm_trace = ast.literal_eval(patient["BPM_Trace"])
+        bpm_avg = sum(bpm_trace) / len(bpm_trace)
+        age = int(patient["Age"])
+        symptoms = patient["Symptoms"] == 'y'
+        status = patient["Status"]
+        is_athlete = patient["Athlete"] == 'y'
+        is_pregnant = patient["Pregnant"] == 'y'
+        location = patient["Location"]
+        
+        st.success(f"Loaded Profile: **{patient_name}**")
+        
+    else:
+        # Manual Inputs
+        col1, col2 = st.columns(2)
+        with col1:
+            bpm_avg = st.number_input("Enter Heart Rate (BPM)", min_value=30, max_value=220, value=75)
+            age = st.number_input("Age", min_value=1, max_value=120, value=30)
+            location = st.text_input("Location (City, Country)", "New York, USA")
+        with col2:
+            symptoms = st.checkbox("Chest Pain / Shortness of Breath?")
+            is_athlete = st.checkbox("Professional Athlete?")
+            is_pregnant = st.checkbox("Pregnant?")
+            status = "resting" # Simplified for manual
+        
+        bpm_trace = [bpm_avg] * 60
+
+    # --- 1. VISUALIZATION ---
+    st.markdown("---")
+    st.subheader(f"❤️ Live Telemetry: {patient_name}")
+    
+    fig, ax = plt.subplots(figsize=(10, 3))
+    color = 'red' if bpm_avg > 100 or bpm_avg < 60 else 'green'
+    ax.plot(bpm_trace, color=color, linewidth=2, label=f'Avg BPM: {bpm_avg:.0f}')
+    ax.set_ylabel('BPM')
+    ax.set_xlabel('Time (seconds)')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    st.pyplot(fig)
 
     # --- 2. DIAGNOSIS ENGINE ---
     upper_limit = 110 if is_pregnant else 100
     cond_key = "Normal"
-    condition = "Normal Sinus Rhythm"
-    urgency = "Safe"
     
     if symptoms:
         condition = "SYMPTOMATIC EMERGENCY"
         urgency = "CRITICAL (CODE RED)"
         cond_key = "Emergency_Symptomatic"
+        st.error(f"## DIAGNOSIS: {condition}")
     elif status == 'resting' and bpm_avg > 150:
         condition = "Supraventricular Tachycardia (SVT)"
         urgency = "HIGH"
         cond_key = "SVT_AFib"
+        st.warning(f"## DIAGNOSIS: {condition}")
     elif status == 'resting' and bpm_avg > upper_limit:
         condition = "Tachycardia (Elevated)"
         urgency = "Medium"
         cond_key = "Moderate Tachycardia"
+        st.warning(f"## DIAGNOSIS: {condition}")
     elif bpm_avg < 40:
         condition = "Severe Bradycardia"
         urgency = "HIGH"
         cond_key = "Severe Bradycardia"
+        st.warning(f"## DIAGNOSIS: {condition}")
     elif bpm_avg < 60 and not is_athlete:
         condition = "Bradycardia"
         urgency = "Low-Medium"
         cond_key = "Bradycardia"
+        st.info(f"## DIAGNOSIS: {condition}")
+    else:
+        condition = "Normal Sinus Rhythm"
+        urgency = "Safe"
+        cond_key = "Normal"
+        st.success(f"## DIAGNOSIS: {condition}")
 
-    # --- 3. MEDICINE LOOKUP ---
-    med_info = {"Name": "Consult Doctor", "Brand": "-", "Dose": "-", "Freq": "-", "Time": "-", "Instr": "-", "Risk": "-"}
+    # --- 3. MEDICINE & REPORT ---
     try:
-        med_rows = df_meds[df_meds['Condition_Key'] == cond_key]
-        if not med_rows.empty:
-            row = med_rows.iloc[0]
-            med_info = {
-                "Name": row['Medicine_Name'], "Brand": row['Brand_Name'],
-                "Dose": row['Dosage'], "Freq": row['Frequency'],
-                "Time": row['Best_Time'], "Instr": row['Instructions'],
-                "Risk": row['Risk_Warning']
-            }
-    except Exception as e:
-        print(f"⚠️ Medicine lookup error: {e}")
+        row = df_meds[df_meds['Condition_Key'] == cond_key].iloc[0]
+        med_info = row.to_dict()
+    except:
+        med_info = {"Medicine_Name": "Consult Doctor", "Brand_Name": "-", "Dosage": "-", "Frequency": "-", "Best_Time": "-", "Instructions": "-", "Risk_Warning": "-"}
 
-    # --- 4. MAP GENERATION (Saves to HTML & Opens Browser) ---
-    if location and gmaps:
+    c1, c2 = st.columns(2)
+    with c1:
+        st.info(f"**Urgency Level:** {urgency}")
+        st.markdown(f"**Recommended Action:** {med_info['Instructions']}")
+    with c2:
+        st.write(f"**Medicine:** {med_info['Medicine_Name']} ({med_info['Brand_Name']})")
+        st.write(f"**Dosage:** {med_info['Dosage']} | {med_info['Frequency']}")
+        if med_info['Risk_Warning'] != "None":
+            st.error(f"⚠️ {med_info['Risk_Warning']}")
+
+    # --- 4. MAP GENERATION ---
+    st.markdown("---")
+    st.subheader("📍 Nearby Medical Services")
+    
+    if not API_KEY or API_KEY == "YOUR_GOOGLE_API_KEY_HERE":
+        st.warning("Please enter a valid Google Maps API Key in the code to view the map.")
+    elif location and gmaps:
         try:
-            print(f"🌍 Locating {location} and finding nearby services...")
-            geo = gmaps.geocode(location)
-            if geo:
-                lat = geo[0]['geometry']['location']['lat']
-                lng = geo[0]['geometry']['location']['lng']
-                
-                # Create Map
-                m = folium.Map(location=[lat, lng], zoom_start=14)
-                folium.Marker([lat, lng], popup="<b>Patient Location</b>", icon=folium.Icon(color='blue', icon='user')).add_to(m)
+            with st.spinner(f"Locating {location}..."):
+                geo = gmaps.geocode(location)
+                if geo:
+                    lat = geo[0]['geometry']['location']['lat']
+                    lng = geo[0]['geometry']['location']['lng']
+                    
+                    # Create Map
+                    m = folium.Map(location=[lat, lng], zoom_start=14)
+                    folium.Marker([lat, lng], popup="Patient", icon=folium.Icon(color='blue', icon='user')).add_to(m)
 
-                # Add Hospitals (Red)
-                try:
+                    # Add Hospitals
                     hosp = gmaps.places_nearby(location=(lat, lng), rank_by='distance', type='hospital')
                     for p in hosp.get('results', [])[:3]:
                         loc = p['geometry']['location']
-                        link = f"https://www.google.com/maps/search/?api=1&query={loc['lat']},{loc['lng']}"
-                        folium.Marker([loc['lat'], loc['lng']], popup=f"🏥 <b>{p['name']}</b><br><a href='{link}' target='_blank'>Navigate</a>", icon=folium.Icon(color='red', icon='plus')).add_to(m)
-                except Exception as e:
-                    print(f"⚠️ Could not fetch hospitals: {e}")
+                        folium.Marker(
+                            [loc['lat'], loc['lng']], 
+                            popup=f"🏥 {p['name']}", 
+                            icon=folium.Icon(color='red', icon='plus')
+                        ).add_to(m)
 
-                # Add Pharmacies (Green)
-                try:
+                    # Add Pharmacies
                     pharm = gmaps.places_nearby(location=(lat, lng), rank_by='distance', type='pharmacy')
                     for p in pharm.get('results', [])[:3]:
                         loc = p['geometry']['location']
-                        link = f"https://www.google.com/maps/search/?api=1&query={loc['lat']},{loc['lng']}"
-                        folium.Marker([loc['lat'], loc['lng']], popup=f"💊 <b>{p['name']}</b><br><a href='{link}' target='_blank'>Navigate</a>", icon=folium.Icon(color='green', icon='medkit', prefix='fa')).add_to(m)
-                except Exception as e:
-                    print(f"⚠️ Could not fetch pharmacies: {e}")
+                        folium.Marker(
+                            [loc['lat'], loc['lng']], 
+                            popup=f"💊 {p['name']}", 
+                            icon=folium.Icon(color='green', icon='medkit', prefix='fa')
+                        ).add_to(m)
 
-                # SAVE AND OPEN
-                map_filename = "medical_map.html"
-                m.save(map_filename)
-                webbrowser.open(map_filename)
-                print(f"✅ Map generated and opened in browser: {map_filename}")
-
+                    # Render map in Streamlit
+                    st_folium(m, width=700, height=500)
+                else:
+                    st.error("Location not found.")
         except Exception as e:
-            print(f"❌ Map Error: {e}")
-    elif not gmaps:
-        print("⚠️ Map skipped (API Key missing).")
+            st.error(f"Map Error: {e}")
 
-    # --- 5. FINAL REPORT ---
-    print("\n" + "="*60)
-    print(f"📄 DETAILED MEDICAL REPORT | Patient: {patient_name}")
-    print("="*60)
-    print(f"DIAGNOSIS  : {condition}")
-    print(f"URGENCY    : {urgency}")
-    print("-" * 60)
-    print(f"💊 MEDICATION PROTOCOL")
-    print(f"Medicine   : {med_info['Name']} ({med_info['Brand']})")
-    print(f"Dosage     : {med_info['Dose']}")
-    print(f"Frequency  : {med_info['Freq']}")
-    print(f"Best Time  : {med_info['Time']}")
-    print("-" * 60)
-    print(f"📝 INSTRUCTIONS: {med_info['Instr']}")
-    print(f"⚠️ WARNING: {med_info['Risk']}")
-    print("="*60 + "\n")
-
-# --- RUN APPLICATION ---
 if __name__ == "__main__":
-    check_heart_health()
+    main()

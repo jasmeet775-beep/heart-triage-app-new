@@ -1,2 +1,6 @@
-streamlit
 pandas
+folium
+matplotlib
+googlemaps
+streamlit
+streamlit-folium
