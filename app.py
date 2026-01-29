@@ -15,7 +15,7 @@ API_KEY = ""
 
 # Initialize Google Maps Client
 gmaps = None
-if API_KEY and API_KEY != "AIzaSyCgD-9bS0ECQEgvUHio6DCLITQmQm1FLzA":
+if API_KEY and API_KEY != "":
     try:
         gmaps = googlemaps.Client(key=API_KEY)
     except ValueError:
