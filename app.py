@@ -11,11 +11,11 @@ import os
 # --- 1. SETUP & CONFIGURATION ---
 
 # 🛑 PASTE YOUR API KEY HERE
-API_KEY = "YOUR_GOOGLE_API_KEY_HERE"
+API_KEY = "AIzaSyCgD-9bS0ECQEgvUHio6DCLITQmQm1FLzA"
 
 # Initialize Google Maps Client
 gmaps = None
-if API_KEY and API_KEY != "YOUR_GOOGLE_API_KEY_HERE":
+if API_KEY and API_KEY != "AIzaSyCgD-9bS0ECQEgvUHio6DCLITQmQm1FLzA":
     try:
         gmaps = googlemaps.Client(key=API_KEY)
     except ValueError:
